@@ -20,7 +20,11 @@ class Process:
         self.status         = status
         self.RAMlist        = list()
         self.PVM            = False
+        self.allVM          = False
     
+    def setNewListIndex(self):
+        self.RAMlist = []
+        
     def setListIndex(self, position):
         self.RAMlist.append(position)
     
@@ -42,6 +46,12 @@ class Process:
     
     def getIsLastPageInVM(self):
         return self.PVM 
+    
+    def setIsAllInVM(self,ans):
+        self.allVM = ans
+    
+    def getIsAllInVM(self):
+        return self.allVM 
     
     def getLastPageSize(self):
         return len(self.RAMlist[-1])

@@ -20,7 +20,7 @@ from calculator import makeOperation
 YSpace = 34
 XSpace = 5
 RAM = np.full((YSpace,XSpace),None)
-Secundary = np.full((YSpace,XSpace),None)
+Secundary = np.full((36,XSpace),None)
 endedList       = list() # Complementa la RAM
 lockedList      = list()# Complementa la RAM
 queueReady      = list()# Complementa la RAM
@@ -90,10 +90,12 @@ def checkSpace(memoryRequired):
     for e in notAvailable:
         x  = np.delete(x, np.argwhere(x == e))
     """
+    print(RAM)
     print(notAvailable)
     print(f"{len(x)} {memoryRequired} \n")
     print(x)
     print("\n")
+    printMemories()
     time.sleep(5)    
     """
     if len(x) >= memoryRequired:
@@ -108,17 +110,17 @@ def getSpaces():
     x = list(set(x))
     x.sort()
     y = zz[1] #Que elementos en cada fila estan disponibles
-    #print("tg")
-    #print(y)
-    #print("sdadsdsad")
+
     available = list()
     y = y.tolist() 
-    #print(y)
+
     coord = 0
     notAvailable = list()
     for r in x:
         Available = True
         for i in range(5):
+            #print(i)
+            #time.sleep(2)
             if RAM[r][i] != None: 
                 Available =  False
                 notAvailable.append(r)
@@ -131,7 +133,7 @@ def getSpaces():
             coord += 1
     #Limpiar x
     for e in notAvailable:
-        x.remove(e)
+        x.remove(e) 
     return x, available
             
 def addToRAM(process):
@@ -141,8 +143,7 @@ def addToRAM(process):
     raws , columns = getSpaces()#2 - Checar espacios en RAM 
     counter = 0
     z = process.getSize()
-    i = 0
-    
+    i = 0 
     for r in raws :
         if counter == process.getSize():
             break
@@ -170,6 +171,30 @@ def addToRAM(process):
     """
     queueReady.append(process)
     newList.remove(process)
+
+def addSuspendedToRAM(process):
+    global RAM
+    global suspendedList
+    global queueReady 
+    raws , columns = getSpaces()#2 - Checar espacios en RAM 
+    counter = 0
+    z = process.getSize()
+    i = 0
+    process.setNewListIndex()
+    for r in raws :
+        if counter == process.getSize():
+            break
+        column = columns[i]
+        i += 1
+        page = list()
+        for c in column:
+            page.append([r,c])
+            RAM[r][c] = process
+            counter += 1
+            if counter == process.getSize():
+                break
+        process.setListIndex(page)
+    process.setState(1)
 
 def addPageToRAM(process):
     global RAM
@@ -220,10 +245,12 @@ def motor(n):
         
         while len(newList ) != 0: 
             e = newList[0]
-            if checkSpace(e.getSize()):
-                addToRAM(e)
-            else:
+            if not checkSpace(e.getSize()):
                 break
+            else:
+                e.setState(1)
+                addToRAM(e)
+                
         allList = newList  + lockedList + queueReady + suspendedList
         #3 - Ejecución e impresion
         if len(queueReady) > 0:
@@ -280,10 +307,26 @@ def motor(n):
                                 key = msvcrt.getch().decode('utf-8')
                                 key = key.lower()
                                 if key == 'c':
-                                    break          
+                                    break            
                     elif key == 's':
                         if len(lockedList) > 0:
-                            addToSuspended()
+                            task = addToSuspended()
+                            if task:
+                                if  checkSpaceSecundary(task.getSize()):
+                                    cleanRAM(task)
+                                    #print(task.getListIndex())
+                                    addSuspendedToSecundary(task)
+                                    #print(task.getListIndex())
+                                    task.setIsAllInVM(True) 
+                                    while len(newList ) != 0: 
+                                        e = newList[0]
+                                        if not checkSpace(e.getSize()):
+                                            break
+                                        else:
+                                            e.setState(1)
+                                            addToRAM(e)
+                                else:
+                                    print("No hay espacio")
                     elif key == 'u':
                         mainMemory = getMainMemory()
                         if len(mainMemory) > 0:
@@ -297,12 +340,19 @@ def motor(n):
                         if len(suspendedList) > 0:
                             task = suspendedList[0]
                             if task.getIsLastPageInVM():
-                                if  checkSpaceSecundary(task.getLastPageSize()):
+                                if  checkSpace(task.getLastPageSize()):
                                     removePageFromVirtualMemory(task)
                                     addPageToRAM(task)
                                     queueReady.append(task)
                                     suspendedList.remove(task)
                                     task.setIsLastPageInVM(False)
+                            elif task.getIsAllInVM():
+                                if  checkSpace(task.getSize()):
+                                        removeFromVirtualMemory(task)
+                                        addSuspendedToRAM(task)
+                                        queueReady.append(task)
+                                        suspendedList.remove(task)
+                                        task.setIsAllInVM(False)
                             else:
                                 task.setState(1)
                                 queueReady.append(task)
@@ -337,13 +387,13 @@ def getRAM():
                 line += str(e) + "  "
         #print(f"{line} \n")
         tableData.append(line)
-        line = ""
+        line = "" 
     return tableData
 
 def removePageFromRAM(process):
     global RAM
     positions = process.getLastPage()
-    print(positions)
+    #print(positions)
     for e in positions :
         RAM[e[0]][e[1]] = None 
         
@@ -354,7 +404,16 @@ def removePageFromVirtualMemory(process):
     #time.sleep(5)
     for e in positions :
         Secundary[e[0]][e[1]] = None 
-        
+
+def removeFromVirtualMemory(process):
+    global Secundary
+    positionsList = process.getListIndex()
+    #print(positionsList)
+    #time.sleep(5)
+    for x in positionsList :
+        for e in x: 
+            Secundary[e[0]][e[1]] = None 
+           
 def checkSpaceSecundary(memoryRequired):
     #return booleano , cabe o no ?
     global Secundary
@@ -382,24 +441,25 @@ def checkSpaceSecundary(memoryRequired):
         return True
     else :
         return False
-"""
+
 def addToSuspended():
     global suspendedList
     global lockedList
-    if not checkSpaceSecundary(lockedList[0].getLastPageSize()):
+    if not checkSpaceSecundary(lockedList[0].getSize()):
         return False
     e = lockedList.pop(0)
     e.setState(6)
     suspendedList.append(e)
     return e
-"""
 
+"""
 def addToSuspended():
     global suspendedList
     global lockedList
     e = lockedList.pop(0)
     e.setState(6)
     suspendedList.append(e)
+"""
 
 def addToVirtualMemory():
     mainMemory = getMainMemory()
@@ -431,14 +491,58 @@ def addToSecundary(process):
         #time.sleep(5)
         process.setLasPage(page)
 
+def addSuspendedToSecundary(process):
+    global Secundary 
+    raws , columns = getSpacesSecundary()#2 - Checar espacios en Disco
+    counter = 0
+    z = process.getSize()
+    i = 0
+    process.setNewListIndex()
+    
+    for r in raws :
+        if counter == z:
+            break
+        column = columns[i]
+        i += 1
+        page = list()
+        for c in column:
+            page.append([r,c])
+            #page.append([0,0])
+            Secundary[r][c] = process
+            counter += 1
+            if counter == z:
+                break
+        process.setListIndex(page)
+        #print(page)
+        #time.sleep(5)
+
+def printStateTable():
+    print("Representacion ---> [ID, Estado]\n")
+    tableData = [['Listo',
+                  'Bloqueado',
+                  'Ejecucion',
+                  'Suspendido'
+                  ]]
+    tableData.append([
+        str(1),
+        str(3),
+        str(4),
+        str(6)
+    ])
+    table = AsciiTable(tableData)
+    
+    print(table.table)
+    
+    
 def printMemories():
     global YSpace
+    printStateTable()
     tableData = [['Memoria Principal',
                   'Memoria Secundaria']]
     ram = getRAM()
     secundary = getSecundary()
     
-    for i in range(YSpace):
+    for i in range(36):
         tableData.append([ram[i],
                           secundary[i]])
         #print(ram[i])
@@ -509,9 +613,8 @@ def getSpacesSecundary():
 def getMainMemory():
     global lockedList
     global queueReady
-    global suspendedList
     
-    mainMemory = queueReady + suspendedList + lockedList
+    mainMemory = queueReady  + lockedList
     return mainMemory
 
 #-----------------------------------------------------------------------------------
@@ -604,7 +707,23 @@ def executionState():
                                     break            
             elif key == 's':
                 if len(lockedList) > 0:
-                    addToSuspended()
+                    task = addToSuspended()
+                    if task:
+                        if  checkSpaceSecundary(task.getSize()):
+                            cleanRAM(task)
+                            #print(task.getListIndex())
+                            addSuspendedToSecundary(task)
+                            #print(task.getListIndex())
+                            task.setIsAllInVM(True) 
+                            while len(newList ) != 0: 
+                                e = newList[0]
+                                if not checkSpace(e.getSize()):
+                                    break
+                                else:
+                                    e.setState(1)
+                                    addToRAM(e)
+                        else:
+                            print("No hay espacio")
             elif key == 'u':
                 mainMemory = getMainMemory()
                 if len(mainMemory) > 0:
@@ -614,16 +733,24 @@ def executionState():
                             removePageFromRAM(task)
                             addToSecundary(task)
                             task.setIsLastPageInVM(True)
+                    checkReady()
             elif key == 'r':
                 if len(suspendedList) > 0:
                     task = suspendedList[0]
                     if task.getIsLastPageInVM():
-                        if  checkSpaceSecundary(task.getLastPageSize()):
+                        if  checkSpace(task.getLastPageSize()):
                             removePageFromVirtualMemory(task)
                             addPageToRAM(task)
                             queueReady.append(task)
                             suspendedList.remove(task)
                             task.setIsLastPageInVM(False)
+                    elif task.getIsAllInVM():
+                        if  checkSpace(task.getSize()):
+                                removeFromVirtualMemory(task)
+                                addSuspendedToRAM(task)
+                                queueReady.append(task)
+                                suspendedList.remove(task)
+                                task.setIsAllInVM(False)
                     else:
                         task.setState(1)
                         queueReady.append(task)
@@ -705,10 +832,11 @@ def checkReady():
         a = queueReady + lockedList 
     while len(newList ) != 0: 
         e = newList[0]
-        if checkSpace(e.getSize()):
-            addToRAM(e)
-        else:
+        if not checkSpace(e.getSize()):
             break
+        else:
+            e.setState(1)
+            addToRAM(e)
         
 def updateTimes():
         
@@ -789,11 +917,16 @@ def getSuspended():
     global suspendedList
     print("\n TABLA DE SUSPENDIDOS ")
     tableData = [['ID',
-                  "Tamaño de ultima pagina"]]
+                  "Espacio requerido"]]
     for task in suspendedList:
-        tableData.append([task.getId(),
-                          str(task.getLastPageSize()) 
-                          ])
+        if task.getIsAllInVM():
+            tableData.append([task.getId(),
+                            str(task.getSize()) 
+                            ])
+        elif task.getIsLastPageInVM():
+            tableData.append([task.getId(),
+                            str(task.getLastPageSize()) 
+                            ])
     table = AsciiTable(tableData)
     print(table.table)
         
